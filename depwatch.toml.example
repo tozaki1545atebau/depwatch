@@ -1,0 +1,26 @@
+# depwatch configuration file
+# Copy this to depwatch.toml and adjust values as needed.
+
+# Path to the requirements file to monitor
+requirements_file = "requirements.txt"
+
+# How often to check for outdated packages / CVEs (in seconds)
+# Default: 3600 (1 hour)
+check_interval_seconds = 3600
+
+# Packages to skip during checks (e.g. internal or pinned packages)
+ignored_packages = [
+    # "my-internal-lib",
+    # "some-pinned-package",
+]
+
+[alert]
+# Email address to send alerts to (optional)
+# email = "ops@example.com"
+
+# Slack incoming webhook URL for notifications (optional)
+# slack_webhook = "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+
+# Minimum CVE severity level to trigger an alert
+# Accepted values: "low", "medium", "high", "critical"
+min_severity = "medium"
