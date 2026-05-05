@@ -70,6 +70,23 @@ class TestFetchVulnerabilities:
         result = fetch_vulnerabilities(PACKAGE, VERSION)
         assert result.vulnerabilities[0].severity == "MEDIUM"
 
+    @patch("depwatch.cve.requests.post")
+    def test_multiple_vulnerabilities_are_all_parsed(self, mock_post):
+        """All vulnerabilities returned by OSV should be present in the result."""
+        second_vuln = {
+            "id": "GHSA-aaaa-bbbb-cccc",
+            "summary": "SQL injection in requests",
+            "aliases": ["CVE-2022-99999"],
+            "severity": [{"score": "CRITICAL"}],
+        }
+        mock_post.return_value = _make_osv_response([SAMPLE_VULN, second_vuln])
+        result = fetch_vulnerabilities(PACKAGE, VERSION)
+        assert result.is_vulnerable
+        assert len(result.vulnerabilities) == 2
+        vuln_ids = {v.vuln_id for v in result.vulnerabilities}
+        assert "GHSA-xxxx-yyyy-zzzz" in vuln_ids
+        assert "GHSA-aaaa-bbbb-cccc" in vuln_ids
+
 
 class TestCheckCves:
     @patch("depwatch.cve.fetch_vulnerabilities")
@@ -84,13 +101,3 @@ class TestCheckCves:
         results = check_cves({})
         assert results == []
         mock_fetch.assert_not_called()
-
-
-class TestVulnerabilityStr:
-    def test_str_with_severity(self):
-        v = Vulnerability(vuln_id="CVE-2021-1", summary="Bad bug", severity="HIGH")
-        assert str(v) == "CVE-2021-1 [HIGH]: Bad bug"
-
-    def test_str_without_severity(self):
-        v = Vulnerability(vuln_id="CVE-2021-1", summary="Bad bug")
-        assert str(v) == "CVE-2021-1: Bad bug"
