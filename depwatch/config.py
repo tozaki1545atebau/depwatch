@@ -5,73 +5,89 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Optional
 
 try:
     import tomllib
 except ImportError:  # Python < 3.11
-    import tomli as tomllib  # type: ignore
+    import tomli as tomllib  # type: ignore[no-redef]
 
 
 @dataclass
 class AlertConfig:
-    email_enabled: bool = False
     email_to: Optional[str] = None
     email_from: Optional[str] = None
     smtp_host: str = "localhost"
-    smtp_port: int = 587
-    log_enabled: bool = True
+    smtp_port: int = 25
+    log_alerts: bool = True
+
+
+@dataclass
+class WebhookAlertConfig:
+    url: Optional[str] = None
+    secret: Optional[str] = None
+    timeout: int = 10
+    enabled: bool = False
 
 
 @dataclass
 class DepwatchConfig:
-    packages: List[str] = field(default_factory=list)
-    check_interval_seconds: int = 3600
-    check_cves: bool = True
+    requirements_file: str = "requirements.txt"
+    interval_seconds: int = 3600
     alert: AlertConfig = field(default_factory=AlertConfig)
+    webhook: WebhookAlertConfig = field(default_factory=WebhookAlertConfig)
 
 
 def _parse_alert(raw: dict) -> AlertConfig:
-    alert_raw = raw.get("alert", {})
     return AlertConfig(
-        email_enabled=alert_raw.get("email_enabled", False),
-        email_to=alert_raw.get("email_to"),
-        email_from=alert_raw.get("email_from"),
-        smtp_host=alert_raw.get("smtp_host", "localhost"),
-        smtp_port=int(alert_raw.get("smtp_port", 587)),
-        log_enabled=alert_raw.get("log_enabled", True),
+        email_to=raw.get("email_to"),
+        email_from=raw.get("email_from"),
+        smtp_host=raw.get("smtp_host", "localhost"),
+        smtp_port=int(raw.get("smtp_port", 25)),
+        log_alerts=bool(raw.get("log_alerts", True)),
     )
 
 
-def from_file(path: str | Path = "depwatch.toml") -> DepwatchConfig:
-    """Load configuration from a TOML file."""
+def _parse_webhook(raw: dict) -> WebhookAlertConfig:
+    return WebhookAlertConfig(
+        url=raw.get("url"),
+        secret=raw.get("secret"),
+        timeout=int(raw.get("timeout", 10)),
+        enabled=bool(raw.get("enabled", False)),
+    )
+
+
+def from_file(path: str | Path) -> DepwatchConfig:
     p = Path(path)
     if not p.exists():
-        raise FileNotFoundError(f"Config file not found: {p}")
+        raise FileNotFoundError(f"Config file not found: {path}")
     with p.open("rb") as fh:
         raw = tomllib.load(fh)
     return DepwatchConfig(
-        packages=raw.get("packages", []),
-        check_interval_seconds=int(raw.get("check_interval_seconds", 3600)),
-        check_cves=bool(raw.get("check_cves", True)),
-        alert=_parse_alert(raw),
+        requirements_file=raw.get("requirements_file", "requirements.txt"),
+        interval_seconds=int(raw.get("interval_seconds", 3600)),
+        alert=_parse_alert(raw.get("alert", {})),
+        webhook=_parse_webhook(raw.get("webhook", {})),
     )
 
 
 def from_env() -> DepwatchConfig:
-    """Load configuration from environment variables."""
-    packages_raw = os.environ.get("DEPWATCH_PACKAGES", "")
-    packages = [p.strip() for p in packages_raw.split(",") if p.strip()]
+    alert = AlertConfig(
+        email_to=os.environ.get("DEPWATCH_EMAIL_TO"),
+        email_from=os.environ.get("DEPWATCH_EMAIL_FROM"),
+        smtp_host=os.environ.get("DEPWATCH_SMTP_HOST", "localhost"),
+        smtp_port=int(os.environ.get("DEPWATCH_SMTP_PORT", "25")),
+        log_alerts=os.environ.get("DEPWATCH_LOG_ALERTS", "true").lower() != "false",
+    )
+    webhook = WebhookAlertConfig(
+        url=os.environ.get("DEPWATCH_WEBHOOK_URL"),
+        secret=os.environ.get("DEPWATCH_WEBHOOK_SECRET"),
+        timeout=int(os.environ.get("DEPWATCH_WEBHOOK_TIMEOUT", "10")),
+        enabled=os.environ.get("DEPWATCH_WEBHOOK_ENABLED", "false").lower() == "true",
+    )
     return DepwatchConfig(
-        packages=packages,
-        check_interval_seconds=int(os.environ.get("DEPWATCH_INTERVAL", 3600)),
-        check_cves=os.environ.get("DEPWATCH_CHECK_CVES", "true").lower() == "true",
-        alert=AlertConfig(
-            email_enabled=os.environ.get("DEPWATCH_EMAIL_ENABLED", "false").lower() == "true",
-            email_to=os.environ.get("DEPWATCH_EMAIL_TO"),
-            email_from=os.environ.get("DEPWATCH_EMAIL_FROM"),
-            smtp_host=os.environ.get("DEPWATCH_SMTP_HOST", "localhost"),
-            smtp_port=int(os.environ.get("DEPWATCH_SMTP_PORT", 587)),
-            log_enabled=os.environ.get("DEPWATCH_LOG_ENABLED", "true").lower() == "true",
-        ),
+        requirements_file=os.environ.get("DEPWATCH_REQUIREMENTS", "requirements.txt"),
+        interval_seconds=int(os.environ.get("DEPWATCH_INTERVAL", "3600")),
+        alert=alert,
+        webhook=webhook,
     )
