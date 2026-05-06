@@ -77,3 +77,19 @@ def test_env_partial_override(monkeypatch):
     config = DepwatchConfig.from_env()
     assert config.check_interval_seconds == 300
     assert config.requirements_file == "requirements.txt"  # default preserved
+
+
+def test_invalid_min_severity_raises(toml_config_file):
+    """Ensure that an unrecognised severity level is rejected at load time."""
+    content = textwrap.dedent("""
+        [alert]
+        min_severity = "critical"
+    """)
+    with tempfile.NamedTemporaryFile(suffix=".toml", mode="w", delete=False) as f:
+        f.write(content)
+        tmp_path = f.name
+    try:
+        with pytest.raises(ValueError, match="min_severity"):
+            DepwatchConfig.from_file(tmp_path)
+    finally:
+        os.unlink(tmp_path)
